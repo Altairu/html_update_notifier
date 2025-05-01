@@ -68,9 +68,13 @@ def generate_diff_summary(old_content, new_content):
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(
         f"""
-以下はあるファイルの変更差分です。
-日本語で、どのような更新が行われたかを1〜2文で自然に要約してください：
+以下は、ある技術Wikiサイトにおけるファイルの更新差分です。
+この変更が、利用者にとって実質的な情報の追加・変更（新しいセクションの追加、重要な情報の更新など）であるかを判定してください。
 
+単なる改行・スペース・句読点変更・見た目の修正であれば「この変更は重要ではありません」と返答してください。
+一方で、ユーザーが知るべき内容が更新されていれば、その要点を2〜4行の日本語で要約してください。
+
+差分:
 ```
 {diff_text[:3000]}
 ```
@@ -114,6 +118,8 @@ def main():
     current_hashes = {}
     summaries = []  # 要約を格納するリスト
 
+    # 差分があったファイルのみ処理
+    has_changes = False
     for file in files:
         if file["type"] != "file":  # ディレクトリはスキップ
             continue
@@ -125,15 +131,25 @@ def main():
 
         # ハッシュが異なる場合は変更あり
         if file_path not in previous_hashes or previous_hashes[file_path] != file_hash:
+            has_changes = True
             previous_content = previous_hashes.get(file_path, "")
             summary = generate_diff_summary(previous_content, file_content)
-            summaries.append(summary)  # ファイル名を含めず要約のみ追加
+
+            # AIが「重要ではない」と判断した場合はスキップ
+            if "この変更は重要ではありません" in summary:
+                continue
+
+            summaries.append(summary)  # 重要な変更のみ追加
+
+    # 変更がない場合は終了
+    if not has_changes:
+        print("変更なし：Discord通知もAI呼び出しも行いません")
+        return
 
     # 要約がある場合のみ通知
     if summaries:
         message = (
-            "📝 **Webサイトに変更がありました！**\n\n"
-            "このWebサイトの更新では、以下の変更が加えられました：\n\n"
+            "📝 **Webサイトに変更が加えられました！**\n\n"
             + "\n".join(f"* {s}" for s in summaries)  # 自然な文章形式で要約をリスト化
             + "\n\n🔗 https://altairu.github.io/sken_training_materials/"
         )

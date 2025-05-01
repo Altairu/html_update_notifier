@@ -33,7 +33,7 @@ def generate_diff_summary(old, new):
         raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-pro")
+    model = genai.GenerativeModel("適切なモデルID")  # 利用可能なモデルIDに置き換え
 
     diff = difflib.unified_diff(
         old.splitlines(), new.splitlines(), lineterm="", n=2
@@ -58,10 +58,23 @@ def post_to_discord(summary):
     response = requests.post(DISCORD_WEBHOOK_URL, json=message)
     response.raise_for_status()
 
-def main():
-    current_html = get_html(URL)
+def main():ailable_models():
+    current_html = get_html(URL)API_KEY")
     previous_html = load_previous_html()
-
+        raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
+    current_text = extract_text_from_html(current_html)
+    previous_text = extract_text_from_html(previous_html)
+    models = genai.list_models()
+    if current_text == previous_text:
+        print("変更なし") ID: {model.name}, Description: {model.description}")
+        return
+def main():
+    summary = generate_diff_summary(previous_text, current_text)
+    post_to_discord(summary)
+    save_current_html(current_html)
+    current_html = get_html(URL)
+if __name__ == "__main__":revious_html()
+    main()
     current_text = extract_text_from_html(current_html)
     previous_text = extract_text_from_html(previous_html)
 

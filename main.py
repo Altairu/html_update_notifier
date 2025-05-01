@@ -66,8 +66,8 @@ def main():
     previous_text = extract_text_from_html(previous_html)
 
     if current_text == previous_text:  # 正規化されたテキストを比較
-        print("変更なし")
-        return
+        print("変更なし")  # サイトに変更がない場合
+        return  # メッセージを送信せず終了
 
     summary = generate_diff_summary(previous_text, current_text)
     post_to_discord(summary)

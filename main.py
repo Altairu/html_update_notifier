@@ -7,6 +7,7 @@ import google.generativeai as genai
 # 定数
 URL = "https://altairu.github.io/sken_training_materials/"
 PREVIOUS_HTML_PATH = "previous.html"
+PREVIOUS_SUMMARY_PATH = "previous_summary.txt"  # 要約を保存するファイル
 
 def get_html(url):
     response = requests.get(url)
@@ -23,12 +24,25 @@ def save_current_html(html):
     with open(PREVIOUS_HTML_PATH, "w", encoding="utf-8") as f:
         f.write(html)
 
+def load_previous_summary():
+    if not os.path.exists(PREVIOUS_SUMMARY_PATH):
+        return ""
+    with open(PREVIOUS_SUMMARY_PATH, "r", encoding="utf-8") as f:
+        return f.read()
+
+def save_current_summary(summary):
+    with open(PREVIOUS_SUMMARY_PATH, "w", encoding="utf-8") as f:
+        f.write(summary)
+
 def extract_text_from_html(html):
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text()
     return " ".join(text.split())  # 空白や改行を削除して正規化
 
 def generate_diff_summary(old, new):
+    """
+    HTMLの差分をAIで解析し、変更内容を要約する。
+    """
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
@@ -40,9 +54,11 @@ def generate_diff_summary(old, new):
         old.splitlines(), new.splitlines(), lineterm="", n=2
     )
     diff_text = "\n".join(diff)
+
+    # AIに要約を依頼
     prompt = f"""
 以下はあるWebサイトのHTMLの変更差分です。
-日本語で、どのような更新が行われたかを箇条書きで3〜5行で自然に要約してください：
+日本語で、どのような更新が行われたかを1〜2文で自然に要約してください：
 
 ```
 {diff_text[:3000]}
@@ -65,18 +81,26 @@ def main():
     current_text = extract_text_from_html(current_html)
     previous_text = extract_text_from_html(previous_html)
 
+    # HTMLが同じ場合はスキップ
     if current_text == previous_text:  # 正規化されたテキストを比較
-        print("変更なし")  # サイトに変更がない場合
-        return  # メッセージを送信せず終了
+        print("HTMLに変更なし")
+        return
 
     try:
-        summary = generate_diff_summary(previous_text, current_text)
-        post_to_discord(summary)
+        diff_summary = generate_diff_summary(previous_text, current_text)
+        previous_summary = load_previous_summary()
+
+        # 要約が前回と同じ場合は通知をスキップ
+        if diff_summary == previous_summary:
+            print("同じ要約のため通知をスキップ")
+            return
+
+        post_to_discord(diff_summary)
+        save_current_summary(diff_summary)  # 新しい要約を保存
     except Exception as e:
         print(f"エラーが発生しました: {e}")
     finally:
-        # 必ずHTMLを保存して次回の比較に備える
-        save_current_html(current_html)
+        save_current_html(current_html)  # 必ずHTMLを保存
 
 if __name__ == "__main__":
     main()

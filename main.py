@@ -9,12 +9,6 @@ import google.generativeai as genai
 URL = "https://altairu.github.io/sken_training_materials/"
 PREVIOUS_HTML_PATH = "previous.html"
 
-# Gemini APIのキー設定
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-# モデル指定（無料枠あり）
-model = genai.GenerativeModel("gemini-pro")
-
 def get_html(url):
     response = requests.get(url)
     response.raise_for_status()
@@ -35,6 +29,9 @@ def extract_text_from_html(html):
     return soup.get_text()
 
 def generate_diff_summary(old, new):
+    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+    model = genai.GenerativeModel("gemini-pro")
+
     diff = difflib.unified_diff(
         old.splitlines(), new.splitlines(), lineterm="", n=2
     )

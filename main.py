@@ -76,8 +76,14 @@ def generate_diff_summary(old_content, new_content):
 ```
 """
     )
-    # 修正: 正しい属性を使用
-    return response.candidates[0].text.strip()  # 'candidates'リストからテキストを取得
+
+    # 修正: 最新の仕様に基づきレスポンスを処理
+    if hasattr(response, "text"):
+        return response.text.strip()
+    elif hasattr(response, "candidates"):
+        return response.candidates[0].content.parts[0].text.strip()
+    else:
+        raise ValueError("AIから有効なレスポンスが得られませんでした。")
 
 def post_to_discord(message):
     """

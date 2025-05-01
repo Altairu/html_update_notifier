@@ -33,7 +33,7 @@ def generate_diff_summary(old, new):
         raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name="models/gemini-pro")  # 修正箇所
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     diff = difflib.unified_diff(
         old.splitlines(), new.splitlines(), lineterm="", n=2

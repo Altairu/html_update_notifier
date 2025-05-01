@@ -112,7 +112,7 @@ def main():
     files = get_github_files()
     previous_hashes = load_previous_hashes()
     current_hashes = {}
-    changes = []
+    summaries = []  # 要約を格納するリスト
 
     for file in files:
         if file["type"] != "file":  # ディレクトリはスキップ
@@ -127,11 +127,16 @@ def main():
         if file_path not in previous_hashes or previous_hashes[file_path] != file_hash:
             previous_content = previous_hashes.get(file_path, "")
             summary = generate_diff_summary(previous_content, file_content)
-            changes.append(f"**{file_path}**\n{summary}")
+            summaries.append(summary)  # ファイル名を含めず要約のみ追加
 
-    # 変更がある場合のみ通知
-    if changes:
-        message = "以下のファイルが更新されました:\n" + "\n\n".join(changes)
+    # 要約がある場合のみ通知
+    if summaries:
+        message = (
+            "📝 **Webサイトに変更がありました！**\n\n"
+            "このWebサイトの更新では、以下の変更が加えられました：\n\n"
+            + "\n".join(f"* {s}" for s in summaries)  # 自然な文章形式で要約をリスト化
+            + "\n\n🔗 https://altairu.github.io/sken_training_materials/"
+        )
         post_to_discord(message)
 
     # 現在のハッシュを保存

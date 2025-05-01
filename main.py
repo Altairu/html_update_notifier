@@ -1,4 +1,3 @@
-
 import requests
 import difflib
 import os
@@ -29,7 +28,11 @@ def extract_text_from_html(html):
     return soup.get_text()
 
 def generate_diff_summary(old, new):
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
+
+    genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-pro")
 
     diff = difflib.unified_diff(

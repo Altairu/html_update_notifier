@@ -10,7 +10,7 @@ except ImportError:
     userdata = None
 
 # 定数
-GITHUB_API_URL = "https://api.github.com/repos/Altairu/sken_training_materials/contents/site"
+GITHUB_API_URL_BASE = "https://api.github.com/repos/Altairu/sken_training_materials/contents"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 PREVIOUS_HASHES_PATH = "previous_hashes.txt"
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -19,11 +19,23 @@ GOOGLE_API_KEY = userdata.get("GEMINI_API_KEY") if userdata else os.getenv("GOOG
 # AI初期化
 genai.configure(api_key=GOOGLE_API_KEY)
 
-def get_github_files():
+def get_all_files_from_github(path="site"):
+    """
+    site/以下のすべてのファイルを再帰的に取得
+    """
+    files = []
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    response = requests.get(GITHUB_API_URL, headers=headers)
+    url = f"{GITHUB_API_URL_BASE}/{path}"
+    response = requests.get(url, headers=headers)
     response.raise_for_status()
-    return response.json()
+    contents = response.json()
+
+    for item in contents:
+        if item["type"] == "file":
+            files.append(item)
+        elif item["type"] == "dir":
+            files.extend(get_all_files_from_github(item["path"]))  # 再帰
+    return files
 
 def calculate_hash(content):
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -65,11 +77,6 @@ def generate_diff_summary(old_content, new_content):
 これらに該当する場合は、**「この変更は重要ではありません」** とだけ答えてください。
 逆に、内容に新しい解説や資料が追加されていれば、自然な日本語で2〜4行で要約してください。
 
-| 変更内容例 | 通知されるべきか |
-|----------|------------------|
-| `site/index.html` が MkDocsで自動生成 | ❌ 通知しない |
-| `docs/control.md` に「PID制御とは？」の章追加 | ✅ 通知すべき |
-
 差分:
 
 ```
@@ -100,16 +107,13 @@ def test_network():
 def main():
     test_network()
 
-    files = get_github_files()
+    files = get_all_files_from_github("site")  # 再帰取得
     previous_hashes = load_previous_hashes()
     current_hashes = {}
     summaries = []
     meaningful_changes = False
 
     for file in files:
-        if file["type"] != "file":
-            continue
-
         file_path = file["path"]
         file_content = requests.get(file["download_url"]).text
         file_hash = calculate_hash(file_content)

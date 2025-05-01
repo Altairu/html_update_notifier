@@ -3,14 +3,17 @@ import requests
 import difflib
 import os
 from bs4 import BeautifulSoup
-from openai import OpenAI
+import google.generativeai as genai
 
 # 定数
 URL = "https://altairu.github.io/sken_training_materials/"
 PREVIOUS_HTML_PATH = "previous.html"
 
-# OpenAIクライアントの初期化
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Gemini APIのキー設定
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+# モデル指定（無料枠あり）
+model = genai.GenerativeModel("gemini-pro")
 
 def get_html(url):
     response = requests.get(url)
@@ -44,14 +47,8 @@ def generate_diff_summary(old, new):
 {diff_text[:3000]}
 ```
 """
-
-    response = client.chat.completions.create(
-    model="gpt-3.5-turbo",  # ←ここを修正
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.3
-)
-
-    return response.choices[0].message.content
+    response = model.generate_content(prompt)
+    return response.text.strip()
 
 def post_to_discord(summary):
     DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")

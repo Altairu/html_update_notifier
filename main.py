@@ -33,7 +33,7 @@ def generate_diff_summary(old, new):
         raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("text-bison-001")  # 利用可能なモデルIDに置き換え
+    model = genai.GenerativeModel(model_name="models/gemini-pro")  # 修正箇所
 
     diff = difflib.unified_diff(
         old.splitlines(), new.splitlines(), lineterm="", n=2
@@ -61,7 +61,6 @@ def post_to_discord(summary):
 def main():
     current_html = get_html(URL)
     previous_html = load_previous_html()
-
     current_text = extract_text_from_html(current_html)
     previous_text = extract_text_from_html(previous_html)
 

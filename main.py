@@ -2,6 +2,7 @@ import requests
 import os
 import hashlib
 import difflib
+import google.generativeai as genai
 
 try:
     from google.colab import userdata  # Google Colab環境用
@@ -14,6 +15,9 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # GitHub Actionsで提供されるト�
 PREVIOUS_HASHES_PATH = "previous_hashes.txt"  # ファイルのハッシュを保存するファイル
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 GOOGLE_API_KEY = userdata.get("GEMINI_API_KEY") if userdata else os.getenv("GOOGLE_API_KEY")  # AI用APIキー
+
+# Google Generative AIのクライアントを初期化
+genai.configure(api_key=GOOGLE_API_KEY)
 
 def get_github_files():
     """
@@ -60,8 +64,10 @@ def generate_diff_summary(old_content, new_content):
     )
     diff_text = "\n".join(diff)
 
-    # AIに要約を依頼
-    prompt = f"""
+    # モデルを指定してAIに要約を依頼
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(
+        f"""
 以下はあるファイルの変更差分です。
 日本語で、どのような更新が行われたかを1〜2文で自然に要約してください：
 
@@ -69,14 +75,8 @@ def generate_diff_summary(old_content, new_content):
 {diff_text[:3000]}
 ```
 """
-    # AIリクエスト（仮の関数、実際にはGoogle Generative AIライブラリを使用）
-    response = requests.post(
-        "https://api.generativeai.google.com/v1beta/generate",
-        headers={"Authorization": f"Bearer {GOOGLE_API_KEY}"},  # GOOGLE_API_KEYを使用
-        json={"prompt": prompt}
     )
-    response.raise_for_status()
-    return response.json()["text"].strip()
+    return response.result.strip()
 
 def post_to_discord(message):
     """
@@ -86,7 +86,21 @@ def post_to_discord(message):
     response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
     response.raise_for_status()
 
+def test_network():
+    """
+    ネットワーク接続をテストする。
+    """
+    try:
+        response = requests.get("https://www.google.com")
+        response.raise_for_status()
+        print("ネットワーク接続は正常です。")
+    except Exception as e:
+        print(f"ネットワーク接続に問題があります: {e}")
+
 def main():
+    # ネットワーク接続をテスト
+    test_network()
+
     # GitHub APIからsiteディレクトリのファイルリストを取得
     files = get_github_files()
     previous_hashes = load_previous_hashes()

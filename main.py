@@ -5,95 +5,78 @@ import difflib
 import google.generativeai as genai
 
 try:
-    from google.colab import userdata  # Google Colab環境用
+    from google.colab import userdata
 except ImportError:
     userdata = None
 
 # 定数
 GITHUB_API_URL = "https://api.github.com/repos/Altairu/sken_training_materials/contents/site"
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # GitHub Actionsで提供されるトークン
-PREVIOUS_HASHES_PATH = "previous_hashes.txt"  # ファイルのハッシュを保存するファイル
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+PREVIOUS_HASHES_PATH = "previous_hashes.txt"
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-GOOGLE_API_KEY = userdata.get("GEMINI_API_KEY") if userdata else os.getenv("GOOGLE_API_KEY")  # AI用APIキー
+GOOGLE_API_KEY = userdata.get("GEMINI_API_KEY") if userdata else os.getenv("GOOGLE_API_KEY")
 
-# Google Generative AIのクライアントを初期化
+# AI初期化
 genai.configure(api_key=GOOGLE_API_KEY)
 
 def get_github_files():
-    """
-    GitHub APIを使用してsiteディレクトリ内のファイルリストを取得する。
-    """
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(GITHUB_API_URL, headers=headers)
     response.raise_for_status()
     return response.json()
 
 def calculate_hash(content):
-    """
-    ファイル内容のハッシュを計算する。
-    """
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 def load_previous_hashes():
-    """
-    前回のファイルハッシュを読み込む。
-    """
     if not os.path.exists(PREVIOUS_HASHES_PATH):
         return {}
     with open(PREVIOUS_HASHES_PATH, "r", encoding="utf-8") as f:
         return dict(line.strip().split(" ", 1) for line in f)
 
 def save_current_hashes(hashes):
-    """
-    現在のファイルハッシュを保存する。
-    """
     with open(PREVIOUS_HASHES_PATH, "w", encoding="utf-8") as f:
         for path, file_hash in hashes.items():
             f.write(f"{path} {file_hash}\n")
 
 def generate_diff_summary(old_content, new_content):
-    """
-    ファイルの差分をAIで解析し、変更内容を要約する。
-    """
     if not GOOGLE_API_KEY:
         raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
 
-    # 差分を生成
     diff = difflib.unified_diff(
         old_content.splitlines(), new_content.splitlines(), lineterm="", n=2
     )
     diff_text = "\n".join(diff)
 
-    # モデルを指定してAIに要約を依頼
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(
-    f"""
-以下は、ある技術Wikiサイトにおけるファイルの更新差分です。
+        f"""
+以下は、ある技術Wikiサイトのファイル更新差分です。
 
-この変更が「実質的な情報の追加・更新（＝利用者が読む内容の変化）」を含んでいるかどうかを判定してください。
+この変更が「実質的な情報の追加・更新（＝利用者が読む内容の変化）」を含んでいるかを判定してください。
+
 以下のような変更は重要ではありません：
-
-- ウェブサイトの構造やHTMLレイアウトの変更
-- ナビゲーションやCSS、デザイン変更
-- MkDocs等の自動生成によるインデックス・フッター等の作成
-- 改行、スペース、フォーマット、句読点の修正
+- HTMLレイアウトや構造の変更（div, header など）
+- デザイン、ナビゲーション、フッターなどの修正
+- CSSや表示に関する変更
+- MkDocsなど自動生成によるテンプレートの作成
+- 改行、空白、インデント、スペース、句読点の修正
 
 これらに該当する場合は、**「この変更は重要ではありません」** とだけ答えてください。
+逆に、内容に新しい解説や資料が追加されていれば、自然な日本語で2〜4行で要約してください。
 
-逆に、記事の内容に新しい説明や資料が追加された場合のみ、要約して答えてください。
-
-| 変更内容 | 通知されるべきか |
+| 変更内容例 | 通知されるべきか |
 |----------|------------------|
 | `site/index.html` が MkDocsで自動生成 | ❌ 通知しない |
 | `docs/control.md` に「PID制御とは？」の章追加 | ✅ 通知すべき |
+
 差分:
+
 ```
 {diff_text[:3000]}
-```
 """
     )
 
-    # 修正: 最新の仕様に基づきレスポンスを処理
     if hasattr(response, "text"):
         return response.text.strip()
     elif hasattr(response, "candidates"):
@@ -102,17 +85,11 @@ def generate_diff_summary(old_content, new_content):
         raise ValueError("AIから有効なレスポンスが得られませんでした。")
 
 def post_to_discord(message):
-    """
-    Discordに通知を送信する。
-    """
     payload = {"content": message}
     response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
     response.raise_for_status()
 
 def test_network():
-    """
-    ネットワーク接続をテストする。
-    """
     try:
         response = requests.get("https://www.google.com")
         response.raise_for_status()
@@ -121,19 +98,16 @@ def test_network():
         print(f"ネットワーク接続に問題があります: {e}")
 
 def main():
-    # ネットワーク接続をテスト
     test_network()
 
-    # GitHub APIからsiteディレクトリのファイルリストを取得
     files = get_github_files()
     previous_hashes = load_previous_hashes()
     current_hashes = {}
-    summaries = []  # 要約を格納するリスト
+    summaries = []
+    meaningful_changes = False
 
-    # 差分があったファイルのみ処理
-    has_changes = False
     for file in files:
-        if file["type"] != "file":  # ディレクトリはスキップ
+        if file["type"] != "file":
             continue
 
         file_path = file["path"]
@@ -141,34 +115,26 @@ def main():
         file_hash = calculate_hash(file_content)
         current_hashes[file_path] = file_hash
 
-        # ハッシュが異なる場合は変更あり
         if file_path not in previous_hashes or previous_hashes[file_path] != file_hash:
-            has_changes = True
             previous_content = previous_hashes.get(file_path, "")
             summary = generate_diff_summary(previous_content, file_content)
 
-            # AIが「重要ではない」と判断した場合はスキップ
             if "この変更は重要ではありません" in summary:
                 continue
 
-            summaries.append(summary)  # 重要な変更のみ追加
+            summaries.append(summary)
+            meaningful_changes = True
 
-    # 変更がない場合は終了
-    if not has_changes:
-        print("変更なし：Discord通知もAI呼び出しも行いません")
-        return
-
-    # 要約がある場合のみ通知
-    if summaries:
+    if meaningful_changes:
         message = (
             "📝 **Webサイトに変更が加えられました！**\n\n"
-            + "\n".join(f"* {s}" for s in summaries)  # 自然な文章形式で要約をリスト化
+            + "\n".join(f"* {s}" for s in summaries)
             + "\n\n🔗 https://altairu.github.io/sken_training_materials/"
         )
         post_to_discord(message)
-
-    # 現在のハッシュを保存
-    save_current_hashes(current_hashes)
+        save_current_hashes(current_hashes)
+    else:
+        print("重要な変更がなかったため、通知も保存も行いません。")
 
 if __name__ == "__main__":
     main()

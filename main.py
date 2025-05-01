@@ -20,9 +20,6 @@ GOOGLE_API_KEY = userdata.get("GEMINI_API_KEY") if userdata else os.getenv("GOOG
 genai.configure(api_key=GOOGLE_API_KEY)
 
 def get_all_files_from_github(path="site"):
-    """
-    site/以下のすべてのファイルを再帰的に取得
-    """
     files = []
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     url = f"{GITHUB_API_URL_BASE}/{path}"
@@ -34,7 +31,7 @@ def get_all_files_from_github(path="site"):
         if item["type"] == "file":
             files.append(item)
         elif item["type"] == "dir":
-            files.extend(get_all_files_from_github(item["path"]))  # 再帰
+            files.extend(get_all_files_from_github(item["path"]))
     return files
 
 def calculate_hash(content):
@@ -51,15 +48,7 @@ def save_current_hashes(hashes):
         for path, file_hash in hashes.items():
             f.write(f"{path} {file_hash}\n")
 
-def generate_diff_summary(old_content, new_content):
-    if not GOOGLE_API_KEY:
-        raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
-
-    diff = difflib.unified_diff(
-        old_content.splitlines(), new_content.splitlines(), lineterm="", n=2
-    )
-    diff_text = "\n".join(diff)
-
+def generate_diff_summary(diff_text):
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(
         f"""
@@ -74,11 +63,10 @@ def generate_diff_summary(old_content, new_content):
 - MkDocsなど自動生成によるテンプレートの作成
 - 改行、空白、インデント、スペース、句読点の修正
 
-これらに該当する場合は、**「この変更は重要ではありません」** とだけ答えてください。
+これらに該当する場合は、「この変更は重要ではありません」とだけ答えてください。
 逆に、内容に新しい解説や資料が追加されていれば、自然な日本語で2〜4行で要約してください。
 
 差分:
-
 ```
 {diff_text[:3000]}
 """
@@ -107,7 +95,7 @@ def test_network():
 def main():
     test_network()
 
-    files = get_all_files_from_github("site")  # 再帰取得
+    files = get_all_files_from_github("site")
     previous_hashes = load_previous_hashes()
     current_hashes = {}
     summaries = []
@@ -121,7 +109,16 @@ def main():
 
         if file_path not in previous_hashes or previous_hashes[file_path] != file_hash:
             previous_content = previous_hashes.get(file_path, "")
-            summary = generate_diff_summary(previous_content, file_content)
+            diff_lines = list(difflib.unified_diff(
+                previous_content.splitlines(), file_content.splitlines(), lineterm="", n=2
+            ))
+
+            # 差分が小さいならスキップ（無駄なAPI呼び出しを回避）
+            if len(diff_lines) < 5:
+                continue
+
+            diff_text = "\n".join(diff_lines)
+            summary = generate_diff_summary(diff_text)
 
             if "この変更は重要ではありません" in summary:
                 continue

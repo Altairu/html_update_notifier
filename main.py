@@ -69,9 +69,14 @@ def main():
         print("変更なし")  # サイトに変更がない場合
         return  # メッセージを送信せず終了
 
-    summary = generate_diff_summary(previous_text, current_text)
-    post_to_discord(summary)
-    save_current_html(current_html)
+    try:
+        summary = generate_diff_summary(previous_text, current_text)
+        post_to_discord(summary)
+    except Exception as e:
+        print(f"エラーが発生しました: {e}")
+    finally:
+        # 必ずHTMLを保存して次回の比較に備える
+        save_current_html(current_html)
 
 if __name__ == "__main__":
     main()

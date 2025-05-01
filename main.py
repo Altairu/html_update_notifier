@@ -3,12 +3,17 @@ import os
 import hashlib
 import difflib
 
+try:
+    from google.colab import userdata  # Google Colab環境用
+except ImportError:
+    userdata = None
+
 # 定数
 GITHUB_API_URL = "https://api.github.com/repos/Altairu/sken_training_materials/contents/site"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # GitHub Actionsで提供されるトークン
 PREVIOUS_HASHES_PATH = "previous_hashes.txt"  # ファイルのハッシュを保存するファイル
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # AI用APIキー
+GOOGLE_API_KEY = userdata.get("GEMINI_API_KEY") if userdata else os.getenv("GOOGLE_API_KEY")  # AI用APIキー
 
 def get_github_files():
     """
@@ -67,7 +72,7 @@ def generate_diff_summary(old_content, new_content):
     # AIリクエスト（仮の関数、実際にはGoogle Generative AIライブラリを使用）
     response = requests.post(
         "https://api.generativeai.google.com/v1beta/generate",
-        headers={"Authorization": f"Bearer {GOOGLE_API_KEY}"},
+        headers={"Authorization": f"Bearer {GOOGLE_API_KEY}"},  # GOOGLE_API_KEYを使用
         json={"prompt": prompt}
     )
     response.raise_for_status()

@@ -25,7 +25,8 @@ def save_current_html(html):
 
 def extract_text_from_html(html):
     soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text()
+    text = soup.get_text()
+    return " ".join(text.split())  # 空白や改行を削除して正規化
 
 def generate_diff_summary(old, new):
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -64,7 +65,7 @@ def main():
     current_text = extract_text_from_html(current_html)
     previous_text = extract_text_from_html(previous_html)
 
-    if current_text == previous_text:
+    if current_text == previous_text:  # 正規化されたテキストを比較
         print("変更なし")
         return
 

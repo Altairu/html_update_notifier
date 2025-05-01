@@ -1,106 +1,115 @@
 import requests
-import difflib
 import os
-from bs4 import BeautifulSoup
-import google.generativeai as genai
+import hashlib
+import difflib
 
 # 定数
-URL = "https://altairu.github.io/sken_training_materials/"
-PREVIOUS_HTML_PATH = "previous.html"
-PREVIOUS_SUMMARY_PATH = "previous_summary.txt"  # 要約を保存するファイル
+GITHUB_API_URL = "https://api.github.com/repos/Altairu/sken_training_materials/contents/site"
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # GitHub Actionsで提供されるトークン
+PREVIOUS_HASHES_PATH = "previous_hashes.txt"  # ファイルのハッシュを保存するファイル
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # AI用APIキー
 
-def get_html(url):
-    response = requests.get(url)
+def get_github_files():
+    """
+    GitHub APIを使用してsiteディレクトリ内のファイルリストを取得する。
+    """
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(GITHUB_API_URL, headers=headers)
     response.raise_for_status()
-    return response.text
+    return response.json()
 
-def load_previous_html():
-    if not os.path.exists(PREVIOUS_HTML_PATH):
-        return ""
-    with open(PREVIOUS_HTML_PATH, "r", encoding="utf-8") as f:
-        return f.read()
-
-def save_current_html(html):
-    with open(PREVIOUS_HTML_PATH, "w", encoding="utf-8") as f:
-        f.write(html)
-
-def load_previous_summary():
-    if not os.path.exists(PREVIOUS_SUMMARY_PATH):
-        return ""
-    with open(PREVIOUS_SUMMARY_PATH, "r", encoding="utf-8") as f:
-        return f.read()
-
-def save_current_summary(summary):
-    with open(PREVIOUS_SUMMARY_PATH, "w", encoding="utf-8") as f:
-        f.write(summary)
-
-def extract_text_from_html(html):
-    soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text()
-    return " ".join(text.split())  # 空白や改行を削除して正規化
-
-def generate_diff_summary(old, new):
+def calculate_hash(content):
     """
-    HTMLの差分をAIで解析し、変更内容を要約する。
+    ファイル内容のハッシュを計算する。
     """
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+def load_previous_hashes():
+    """
+    前回のファイルハッシュを読み込む。
+    """
+    if not os.path.exists(PREVIOUS_HASHES_PATH):
+        return {}
+    with open(PREVIOUS_HASHES_PATH, "r", encoding="utf-8") as f:
+        return dict(line.strip().split(" ", 1) for line in f)
+
+def save_current_hashes(hashes):
+    """
+    現在のファイルハッシュを保存する。
+    """
+    with open(PREVIOUS_HASHES_PATH, "w", encoding="utf-8") as f:
+        for path, file_hash in hashes.items():
+            f.write(f"{path} {file_hash}\n")
+
+def generate_diff_summary(old_content, new_content):
+    """
+    ファイルの差分をAIで解析し、変更内容を要約する。
+    """
+    if not GOOGLE_API_KEY:
         raise EnvironmentError("GOOGLE_API_KEY 環境変数が設定されていません。")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-
+    # 差分を生成
     diff = difflib.unified_diff(
-        old.splitlines(), new.splitlines(), lineterm="", n=2
+        old_content.splitlines(), new_content.splitlines(), lineterm="", n=2
     )
     diff_text = "\n".join(diff)
 
     # AIに要約を依頼
     prompt = f"""
-以下はあるWebサイトのHTMLの変更差分です。
+以下はあるファイルの変更差分です。
 日本語で、どのような更新が行われたかを1〜2文で自然に要約してください：
 
 ```
 {diff_text[:3000]}
 ```
 """
-    response = model.generate_content(prompt)
-    return response.text.strip()
+    # AIリクエスト（仮の関数、実際にはGoogle Generative AIライブラリを使用）
+    response = requests.post(
+        "https://api.generativeai.google.com/v1beta/generate",
+        headers={"Authorization": f"Bearer {GOOGLE_API_KEY}"},
+        json={"prompt": prompt}
+    )
+    response.raise_for_status()
+    return response.json()["text"].strip()
 
-def post_to_discord(summary):
-    DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-    message = {
-        "content": f"📝 **Webサイトに変更がありました！**\n\n```\n{summary}\n```\n🔗 <{URL}>"
-    }
-    response = requests.post(DISCORD_WEBHOOK_URL, json=message)
+def post_to_discord(message):
+    """
+    Discordに通知を送信する。
+    """
+    payload = {"content": message}
+    response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
     response.raise_for_status()
 
 def main():
-    current_html = get_html(URL)
-    previous_html = load_previous_html()
-    current_text = extract_text_from_html(current_html)
-    previous_text = extract_text_from_html(previous_html)
+    # GitHub APIからsiteディレクトリのファイルリストを取得
+    files = get_github_files()
+    previous_hashes = load_previous_hashes()
+    current_hashes = {}
+    changes = []
 
-    # HTMLが同じ場合はスキップ
-    if current_text == previous_text:  # 正規化されたテキストを比較
-        print("HTMLに変更なし")
-        return
+    for file in files:
+        if file["type"] != "file":  # ディレクトリはスキップ
+            continue
 
-    try:
-        diff_summary = generate_diff_summary(previous_text, current_text)
-        previous_summary = load_previous_summary()
+        file_path = file["path"]
+        file_content = requests.get(file["download_url"]).text
+        file_hash = calculate_hash(file_content)
+        current_hashes[file_path] = file_hash
 
-        # 要約が前回と同じ場合は通知をスキップ
-        if diff_summary == previous_summary:
-            print("同じ要約のため通知をスキップ")
-            return
+        # ハッシュが異なる場合は変更あり
+        if file_path not in previous_hashes or previous_hashes[file_path] != file_hash:
+            previous_content = previous_hashes.get(file_path, "")
+            summary = generate_diff_summary(previous_content, file_content)
+            changes.append(f"**{file_path}**\n{summary}")
 
-        post_to_discord(diff_summary)
-        save_current_summary(diff_summary)  # 新しい要約を保存
-    except Exception as e:
-        print(f"エラーが発生しました: {e}")
-    finally:
-        save_current_html(current_html)  # 必ずHTMLを保存
+    # 変更がある場合のみ通知
+    if changes:
+        message = "以下のファイルが更新されました:\n" + "\n\n".join(changes)
+        post_to_discord(message)
+
+    # 現在のハッシュを保存
+    save_current_hashes(current_hashes)
 
 if __name__ == "__main__":
     main()

@@ -76,7 +76,8 @@ def generate_diff_summary(old_content, new_content):
 ```
 """
     )
-    return response.result.strip()
+    # 修正: 正しい属性を使用
+    return response.candidates[0]["text"].strip()  # 'candidates'リストからテキストを取得
 
 def post_to_discord(message):
     """

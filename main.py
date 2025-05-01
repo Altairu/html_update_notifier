@@ -1,18 +1,16 @@
 
 import requests
 import difflib
-import openai
 import os
 from bs4 import BeautifulSoup
+from openai import OpenAI
 
+# 定数
 URL = "https://altairu.github.io/sken_training_materials/"
 PREVIOUS_HTML_PATH = "previous.html"
 
-# 環境変数からAPIキーとWebhook URLを取得
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-
-openai.api_key = OPENAI_API_KEY
+# OpenAIクライアントの初期化
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def get_html(url):
     response = requests.get(url)
@@ -46,7 +44,7 @@ def generate_diff_summary(old, new):
 {diff_text[:3000]}
 ```
 """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3
@@ -54,6 +52,7 @@ def generate_diff_summary(old, new):
     return response.choices[0].message.content
 
 def post_to_discord(summary):
+    DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
     message = {
         "content": f"📝 **Webサイトに変更がありました！**\n\n```\n{summary}\n```\n🔗 <{URL}>"
     }

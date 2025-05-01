@@ -44,11 +44,13 @@ def generate_diff_summary(old, new):
 {diff_text[:3000]}
 ```
 """
+
     response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3
-    )
+    model="gpt-3.5-turbo",  # ←ここを修正
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3
+)
+
     return response.choices[0].message.content
 
 def post_to_discord(summary):

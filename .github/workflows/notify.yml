@@ -1,9 +1,7 @@
 name: Notify Site Update
 
 on:
-  schedule:
-    - cron: "0 * * * *"  # 毎時実行（UTC）
-  workflow_dispatch:     # 手動実行も可
+  workflow_dispatch:     # 手動実行のみ可
 
 jobs:
   run:

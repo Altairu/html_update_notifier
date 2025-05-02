@@ -2,15 +2,19 @@ name: Notify Site Update
 
 on:
   schedule:
-    - cron: "0 * * * *" # 毎時実行（UTC）
-  workflow_dispatch:
+    - cron: "0 * * * *"  # 毎時実行（UTC）
+  workflow_dispatch:     # 手動実行も可
 
 jobs:
   run:
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          persist-credentials: true  # Git pushのために必要
+          fetch-depth: 0             # 履歴も取得して rebase を可能に
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -20,12 +24,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Show installed packages
-        run: pip freeze # インストールされているパッケージを表示
-
-      - name: Run bot
+      - name: Run notification bot
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }} # GOOGLE_API_KEYを渡す
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python main.py
+
+      - name: Commit updated hash file
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git pull --rebase
+          git add previous_hashes.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update previous_hashes.txt"
+            git push
+          fi

@@ -2,7 +2,6 @@ import os
 import requests
 import hashlib
 import bs4
-from urllib.parse import unquote
 
 # 定数
 GITHUB_API_URL_BASE = "https://api.github.com/repos/Altairu/sken_training_materials/contents/site"
@@ -49,6 +48,13 @@ def extract_title_from_html(html_text, fallback_name):
     return fallback_name
 
 def post_to_discord(message):
+    if not message.strip():
+        print("空のメッセージは送信されません。")
+        return
+
+    if len(message) > 2000:
+        message = message[:1997] + "..."
+
     payload = {"content": message}
     response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
     response.raise_for_status()
@@ -66,7 +72,7 @@ def main():
         file_hash = calculate_hash(file_content)
         current_hashes[file_path] = file_hash
 
-        # 新規 or 内容変更があるファイルだけ対象
+        # 新規または変更されたファイルのみ通知対象
         if file_path not in previous_hashes or previous_hashes[file_path] != file_hash:
             file_name = os.path.basename(file_path)
             title = extract_title_from_html(file_content, file_name)
@@ -82,7 +88,7 @@ def main():
         post_to_discord(message)
         save_current_hashes(current_hashes)
     else:
-        print("変更されたページはありません。")
+        print("変更されたページはありません。通知は行われません。")
 
 if __name__ == "__main__":
     main()
